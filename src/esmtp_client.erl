@@ -32,7 +32,14 @@ init({Host,Port},Ehlo,From,To,Msg) ->
     init({Host,Port,tcp,no_login},Ehlo,From,To,Msg);
 init(MX,Ehlo,From,To,Msg) ->
     proc_lib:init_ack({ok, self()}),
-    sendemail(MX,Ehlo,From,To,Msg).
+    case catch sendemail(MX,Ehlo,From,To,Msg) of
+        ok ->
+            ok;
+        _ ->
+            %If we don't succeed wait a short time and then retry
+            timer:sleep(random:uniform(20)+10),
+            init(MX,Ehlo,From,To,Msg)
+    end.
 
 sendemail({Host,Port,SSL,Login},Ehlo,From,To,Msg) ->
     {ok, S0} = esmtp_sock:connect(Host, Port, SSL),
