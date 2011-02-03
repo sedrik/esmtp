@@ -8,37 +8,35 @@
 -module(esmtp_client).
 
 %% API
--export([send/5
-         ,start_link/5
-         ,init/5
+-export([send/6
+         ,start_link/6
+         ,init/6
          ,sendemail/5]).
 
 %%====================================================================
 %% API
 %%====================================================================
 
-send(MX, Ehlo, From, To, Msg) when is_list(From), is_list(To) ->
+send(MX, Ehlo, From, To, Msg, Opts) when is_list(From), is_list(To) ->
     is_mx(MX),
-    supervisor:start_child(esmtp_sup, [MX, Ehlo, From, To, Msg]).
+    supervisor:start_child(esmtp_sup, [MX, Ehlo, From, To, Msg, Opts]).
 
-start_link(MX, Ehlo, From, To, Msg) ->
-    proc_lib:start_link(?MODULE, init, [MX, Ehlo, From, To, Msg]).
+start_link(MX, Ehlo, From, To, Msg, Opts) ->
+    proc_lib:start_link(?MODULE, init, [MX, Ehlo, From, To, Msg, Opts]).
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
 
-init({Host,Port},Ehlo,From,To,Msg) ->
-    init({Host,Port,tcp,no_login},Ehlo,From,To,Msg);
-init(MX,Ehlo,From,To,Msg) ->
+init({Host,Port},Ehlo,From,To,Msg, Opts) ->
+    init({Host,Port,tcp,no_login},Ehlo,From,To,Msg, Opts);
+init(MX,Ehlo,From,To,Msg, Opts) ->
     proc_lib:init_ack({ok, self()}),
     case catch sendemail(MX,Ehlo,From,To,Msg) of
         ok ->
             ok;
-        _ ->
-            %If we don't succeed wait a short time and then retry
-            timer:sleep(random:uniform(20)+10),
-            init(MX,Ehlo,From,To,Msg)
+        Error ->
+            send_error_report(Error, Opts)
     end.
 
 sendemail({Host,Port,SSL,Login},Ehlo,From,To,Msg) ->
@@ -61,3 +59,14 @@ sendemail({Host,Port,SSL,Login},Ehlo,From,To,Msg) ->
 is_mx({_Host,Port}) when is_integer(Port) -> true;
 is_mx({_Host,Port,new_ssl,_Login}) when is_integer(Port) -> true;
 is_mx({_Host,Port,gen_tcp,no_login}) when is_integer(Port) -> true.
+
+send_error_report(Error, Opts) ->
+    case proplist:get_value(callback, Opts) of
+        undefined ->
+            Error; %If callback is not defined fail as we would have done in the
+                  %old versions of esmtp
+        Callback ->
+            %We must include either a reference or the initial call. initial
+            %call is probably best
+            Callback:delivery_failure({error, Error})
+    end.
