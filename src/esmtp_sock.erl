@@ -10,6 +10,7 @@
 %% API
 -export([connect/3
          ,read_response/1
+         ,read_response_all/1
          ,command/2
          ,send/2
          ,send_data/2
@@ -28,7 +29,7 @@
 
 connect(Host, Port, Type) ->
     case Type:connect(Host, Port,
-                         ?TCP_OPTS) of
+                      ?TCP_OPTS) of
         {ok, Sock} ->
             {ok, #esmtp_sock{sock=Sock,
                              type=Type}};
@@ -44,14 +45,28 @@ read_response(S = #esmtp_sock{sock=Sock,
             {error, S, Reason}
     end.
 
+read_response_all(S) ->
+    case read_response(S) of
+        {ok, S1, {_, more, _}} ->
+            read_response_all(S1);
+        {ok, _, {_, last, _}} = FinalResponse ->
+            FinalResponse;
+        {error, _} = E -> E
+    end.
+
+
 command(S = #esmtp_sock{},
         Command) when is_tuple(Command) ->
-    {ok, S1} = send(S, [esmtp_codec:encode(Command), $\n]),
-    read_response(S1);
+    {ok, S1} = send(S, [esmtp_codec:encode(Command), $\r, $\n]),
+    read_response_all(S1);
+command(S = #esmtp_sock{},
+        Command) when is_atom(Command) ->
+    {ok, S1} = send(S, [esmtp_codec:encode(Command), $\r, $\n]),
+    read_response_all(S1);
 command(S = #esmtp_sock{},
         Command) ->
     {ok, S1} = send(S, Command),
-    read_response(S1).
+    read_response_all(S1).
 
 send(S = #esmtp_sock{sock=Sock,
                      type=Type},
@@ -64,14 +79,10 @@ send(S = #esmtp_sock{sock=Sock,
     end.
 
 send_data(S = #esmtp_sock{}, Data) ->
-    {ok, S1, {250, _}} = command(S, {data}),
-    {ok, S2} = send(S1, [Data, $\n]),
-    command(S2, {data_end}).
+    {ok, S1, {354, last, _}} = command(S, data),
+    {ok, S2} = send(S1, [Data, "\r\n"]),
+    command(S2, data_end).
 
 close(#esmtp_sock{sock=Sock,
                   type=Type}) ->
     Type:close(Sock).
-
-%%====================================================================
-%% Internal functions
-%%====================================================================

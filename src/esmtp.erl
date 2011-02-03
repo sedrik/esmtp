@@ -25,8 +25,8 @@ start() ->
 %%====================================================================
 
 %====
-% The Opts options is a proplist that can contain any value the user wants it
-% to contain.  Values that are checked for in esmtp are
+% The Opts options is a proplist that can contain any value the user wants it to contain.
+% Values that are checked for in esmtp are
 %   callback - Callback module that implements the esmtp_delivery_failure/1
 %              It will return Opts with the additional entry {error, Error}
 %              stating what went wrong and every argument to send/6 tagged with

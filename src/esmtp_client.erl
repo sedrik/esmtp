@@ -36,24 +36,25 @@ init(MX,Ehlo,From,To,Msg, Opts) ->
         ok ->
             ok;
         Error ->
+            error_logger:error_msg("Could not send message, reason ~p", [Error]),
             send_error_report(Error, Opts)
     end.
 
 sendemail({Host,Port,SSL,Login},Ehlo,From,To,Msg) ->
     {ok, S0} = esmtp_sock:connect(Host, Port, SSL),
-    {ok, S1, {220, _Banner}} = esmtp_sock:read_response(S0),
-    {ok, S2, {250, _Msg}} = esmtp_sock:command(S1, {ehlo, Ehlo}),
+    {ok, S1, {220, _, _Banner}} = esmtp_sock:read_response(S0),
+    {ok, S2, {250, _, _Msg}} = esmtp_sock:command(S1, {ehlo, Ehlo}),
     AuthS = case Login of
                 {User,Pass} ->
-                    {ok, S3, {334, _}} = esmtp_sock:command(S2, {auth, "PLAIN"}),
-                    {ok, S4, {235, _}} = esmtp_sock:command(S3, {auth_plain, User, Pass}),
+                    {ok, S3, {334, _, _}} = esmtp_sock:command(S2, {auth, "PLAIN"}),
+                    {ok, S4, {235, _, _}} = esmtp_sock:command(S3, {auth_plain, User, Pass}),
                     S4;
                 no_login ->
                     S2
             end,
-    {ok, S10, {250, _}} = esmtp_sock:command(AuthS, {mail_from, From}),
-    {ok, S11, {250, _}} = esmtp_sock:command(S10, {rcpt_to, To}),
-    {ok, S12, {250, _}} = esmtp_sock:send_data(S11, Msg),
+    {ok, S10, {250, _, _}} = esmtp_sock:command(AuthS, {mail_from, From}),
+    {ok, S11, {250, _, _}} = esmtp_sock:command(S10, {rcpt_to, To}),
+    {ok, S12, {250, _, _}} = esmtp_sock:send_data(S11, Msg),
     ok = esmtp_sock:close(S12).
 
 is_mx({_Host,Port}) when is_integer(Port) -> true;
@@ -68,5 +69,5 @@ send_error_report(Error, Opts) ->
         Callback ->
             %We must include either a reference or the initial call. initial
             %call is probably best
-            Callback:delivery_failure({error, Error})
+            Callback:delivery_failure([{error, Error}| Opts])
     end.
